@@ -29,3 +29,56 @@ def monitor_security_risk(crowd_density):
     avg_density = np.mean(crowd_density) if crowd_density else 0 
     if avg_density > risk_threshold: 
         return True  # High risk
+ return False 
+# Real-time video stream processing 
+while True: 
+    ret, frame = cap.read() 
+    if not ret: 
+        break 
+    # Perform detection using YOLOv8 
+    results = model(frame)  # Inference with YOLOv8 
+    # Extract results 
+    detections = results[0].boxes  # Get bounding boxes from the results 
+    labels = detections.cls.numpy()  # Get class labels (as integers) 
+    confidences = detections.conf.numpy()  # Get confidence scores 
+    # Get the label names (a dictionary) 
+    label_names = results[0].names 
+    # Check if 'person' is present in the label names 
+    if 'person' not in label_names.values(): 
+        print("Error: 'person' label not found in model output.") 
+        break 
+    # Filter detections for persons (assuming 'person' label) 
+    person_label_index = list(label_names.values()).index('person')  # Get the index of 'person' label 
+    persons = detections[labels == person_label_index]  # Filtering for persons 
+    num_people = len(persons) 
+# Calculate crowd density 
+    crowd_density.append(num_people) 
+    # Estimate crowd density 
+    current_density = estimate_crowd_density(persons) 
+    # Check for security risk 
+    security_risk_flag = monitor_security_risk(crowd_density) 
+    # Draw bounding boxes and labels on the frame 
+    for i in range(len(persons)): 
+        x1, y1, x2, y2 = map(int, persons[i].xywh[0])  # Get bounding box coordinates 
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR, 2) 
+        cv2.putText(frame, f'{label_names[labels[i]]} {confidences[i]:.2f}',  
+                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR, 2)
+# Show crowd density and risk on the frame 
+    cv2.putText(frame, f'Crowd Density: {current_density}', (10, 30), 
+cv2.FONT_HERSHEY_SIMPLEX, 1, COLOR, 2) 
+    if security_risk_flag: 
+        cv2.putText(frame, 'Security Risk Detected!', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, 
+RISK_COLOR, 2) 
+    #Trigger alert if crowd exceeds 10 persons 
+    if num_people > 10: 
+        cv2.putText(frame, "More Crowd!", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 
+255), 2) 
+        winsound.Beep(1000, 500)  # Beep sound alert 
+    # Show the frame 
+    cv2.imshow('Crowd Density & Security Monitoring', frame) 
+    # Press 'q' to quit 
+    if cv2.waitKey(1) & 0xFF == ord('q'): 
+        break 
+# Release resources 
+cap.release() 
+cv2.destroyAllWindows()
