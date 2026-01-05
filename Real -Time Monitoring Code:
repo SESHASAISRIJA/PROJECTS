@@ -1,0 +1,105 @@
+Real -Time Monitoring Code: 
+Code: 
+import cv2
+from ultralytics import YOLO
+import numpy as np
+from collections import deque
+import urllib.request
+import winsound
+
+# Load the YOLOv8 model from the local file
+model = YOLO('yolov8n.pt')  # Load directly from your model file
+
+# IP camera URL (replace with your camera's IP and port)
+url = 'http://192.168.13.102:80/cam-hi.jpg'  
+
+# Initialize video capture from IP camera
+cap = cv2.VideoCapture(url)
+
+# Set up the video frame size
+frame_width = int(cap.get(3))
+frame_height = int(cap.get(4))
+
+# Initialize variables
+frame_count = 0
+crowd_density = deque(maxlen=50)  # Store the crowd density over time for analysis
+risk_threshold = 0.5  # Set your own threshold for risk (crowd density high)
+security_risk_flag = False
+
+# Define colors for detection boxes and text
+COLOR = (0, 255, 0)
+RISK_COLOR = (0, 0, 255)
+
+# Function to estimate crowd density
+def estimate_crowd_density(detections):
+    return len(detections)  # Count the number of detections (people or objects)
+
+# Function to detect and monitor security risks
+def monitor_security_risk(crowd_density):
+    # Simple threshold check for crowd density to flag a risk
+    avg_density = np.mean(crowd_density) if crowd_density else 0
+    if avg_density > risk_threshold:
+        return True  # High risk
+    return False
+
+while True:
+    # Fetch the image from the IP camera
+    img_resp = urllib.request.urlopen(url)
+    img_array = np.array(bytearray(img_resp.read()), dtype=np.uint8)
+    frame = cv2.imdecode(img_array, -1)  # Decode image
+    
+    if frame is None:
+        print("Failed to fetch frame.")
+        continue  # Skip iteration if no frame is received
+
+    # Perform detection using YOLOv8
+    results = model(frame)
+
+    # Extract results
+    detections = results[0].boxes
+    labels = detections.cls.numpy()
+    confidences = detections.conf.numpy()
+    
+    label_names = results[0].names
+
+    # Ensure 'person' is in the label names
+    if 'person' not in label_names.values():
+        print("Error: 'person' label not found in model output.")
+        continue
+
+    # Filter detections for persons
+    person_label_index = list(label_names.values()).index('person')
+    persons = detections[labels == person_label_index]
+    num_people = len(persons)
+
+    # Update crowd density tracking
+    crowd_density.append(num_people)
+    current_density = estimate_crowd_density(persons)
+    security_risk_flag = monitor_security_risk(crowd_density)
+
+    # Draw bounding boxes and labels
+    for i in range(len(persons)):
+        x1, y1, x2, y2 = map(int, persons[i].xywh[0])
+        cv2.rectangle(frame, (x1, y1), (x2, y2), COLOR, 2)
+        cv2.putText(frame, f'{label_names[labels[i]]} {confidences[i]:.2f}', 
+                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLOR, 2)
+
+    # Display crowd density and risk status
+    cv2.putText(frame, f'Crowd Density: {current_density}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, COLOR, 2)
+    if security_risk_flag:
+        cv2.putText(frame, 'Security Risk Detected!', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, RISK_COLOR, 2)
+    
+    # Trigger alert if crowd exceeds 10 persons
+    if num_people > 10:
+        cv2.putText(frame, "More Crowd!", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        winsound.Beep(1000, 500)  # Beep sound alert
+
+    # Show the frame
+    cv2.imshow('Crowd Density & Security Monitoring', frame)
+
+    # Press 'q' to exit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release resources
+cv2.destroyAllWindows()
