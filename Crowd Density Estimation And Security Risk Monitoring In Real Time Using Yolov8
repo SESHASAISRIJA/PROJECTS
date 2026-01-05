@@ -1,0 +1,31 @@
+Crowd Density Estimation of Random video feed Code: 
+  Source Code: 
+import cv2 
+from ultralytics import YOLO 
+import numpy as np 
+from collections import deque 
+import winsound 
+# Load the YOLOv8 model from the local file 
+model = YOLO('yolov8n.pt')  # Load directly from your model file 
+# Initialize video capture (webcam or video file) 
+cap = cv2.VideoCapture('test_5.mp4')  # Use 0 for webcam or provide video file path 
+# Set up the video frame size 
+frame_width = int(cap.get(3)) 
+frame_height = int(cap.get(4)) 
+# Initialize variables 
+frame_count = 0 
+crowd_density = deque(maxlen=50)  # Store the crowd density over time for analysis 
+risk_threshold = 0.5  # Set your own threshold for risk (crowd density high) 
+security_risk_flag = False 
+# Define colors for detection boxes and text 
+COLOR = (0, 255, 0) 
+RISK_COLOR = (0, 0, 255) 
+# Function to estimate crowd density 
+def estimate_crowd_density(detections): 
+    return len(detections)  # Count the number of detections (people or objects) 
+# Function to detect and monitor security risks 
+def monitor_security_risk(crowd_density): 
+    # Simple threshold check for crowd density to flag a risk 
+    avg_density = np.mean(crowd_density) if crowd_density else 0 
+    if avg_density > risk_threshold: 
+        return True  # High risk
